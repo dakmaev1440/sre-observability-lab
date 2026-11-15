@@ -24,6 +24,18 @@ route:
       group_interval: 1m
       repeat_interval: 1m
 
+    - matchers: ['severity="critical"']
+      receiver: "oncall-webhook"
+      group_wait: 0s
+      group_interval: 30s
+      repeat_interval: 2m
+
+    - matchers: ['severity="warning"']
+      receiver: "ticket-webhook"
+      group_wait: 30s
+      group_interval: 1m
+      repeat_interval: 10m
+
 receivers:
   - name: "all-notifications"
     webhook_configs:
@@ -35,7 +47,21 @@ receivers:
         headers:
           Subject: '{{ template "email.default.subject" . }}'
         html: '{{ template "email.default.html" . }}'
+  - name: "oncall-webhook"
+    webhook_configs:
+      - url: "http://alertreceiver:9119/alert"
+        send_resolved: true
+    email_configs:
+      - to: "oncall@example.com"
+        send_resolved: true
+        headers:
+          Subject: '[PAGE] {{ template "email.default.subject" . }}'
+        html: '{{ template "email.default.html" . }}'
 
+  - name: "ticket-webhook"
+    webhook_configs:
+      - url: "http://alertreceiver:9119/alert"
+        send_resolved: true
   - name: "watchdog"
     webhook_configs:
       - url: "http://alertreceiver:9119/alert"
@@ -54,3 +80,8 @@ inhibit_rules:
   - source_matchers: ['alertname="TargetDown"']
     target_matchers: ['alertname=~"CircuitBreakerOpen|RetriesExhausted|ManyBulkheadRejections"']
     equal: ["dependency"]
+
+  # 3
+  - source_matchers: ['alertname="CheckoutPaymentsFailing"']
+    target_matchers: ['alertname="CheckoutCardDeclinedSpike"']
+    equal: ["service"]

@@ -23,6 +23,8 @@ import (
 	"github.com/sony/gobreaker"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
+	"sre-lab/backend/internal/obs"
+
 	"sre-lab/backend/internal/resilience"
 )
 
@@ -179,6 +181,7 @@ func (c *Client) chargeOnce(ctx context.Context, orderRef string, amountCents in
 			return nil, err
 		}
 		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Request-ID", obs.RequestIDFromContext(ctx))
 
 		resp, err := c.httpClient.Do(req)
 		if err != nil {

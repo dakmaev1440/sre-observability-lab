@@ -161,6 +161,58 @@ groups:
           title: "Много отзывов отклоняется валидацией"
           description: "За 5 минут отклонено {{ $value | humanizePercentage }} отзывов (к опубликованным). Вероятно, сломан фронтенд или правила валидации."
 
+
+  - name: checkout-business
+    rules:
+      - alert: CheckoutPaymentsFailing
+        expr: |
+          (
+            sum(increase(backend_checkout_attempts_total{result="technical_failure"}[1m]))
+            /
+            sum(increase(backend_checkout_attempts_total{result=~"paid|business_decline|technical_failure"}[1m]))
+          ) > 0.3
+          and
+          sum(increase(backend_checkout_attempts_total{result=~"paid|business_decline|technical_failure"}[1m])) > 0
+        for: 30s
+        labels:
+          severity: critical
+          service: backend
+        annotations:
+          title: "Checkout: технические сбои оплаты ({{ $value | humanizePercentage }} попыток)"
+          description: "Доля технических сбоев оплаты за 1 минуту = {{ $value | humanizePercentage }} (порог 30%). Бизнес-отказы карт сюда не входят."
+          runbook_url: "https://sre-lab.example/runbooks/CheckoutPaymentsFailing"
+
+      - alert: CheckoutZeroPurchases
+        expr: |
+          sum(increase(backend_checkout_attempts_total{result="paid"}[2m])) == 0
+          and
+          sum(increase(backend_checkout_attempts_total{result=~"paid|technical_failure"}[2m])) > 0
+        for: 0s
+        labels:
+          severity: critical
+          service: backend
+        annotations:
+          title: "Checkout: 2 минуты без единой покупки при наличии попыток"
+          description: "За 2 минуты не было ни одной успешной оплаты, при этом оплаты падали технически (не из-за отказа банка). Торговля идёт вслепую. Проверьте CheckoutPaymentsFailing и состояние circuit breaker."
+          runbook_url: "https://sre-lab.example/runbooks/CheckoutZeroPurchases"
+
+      - alert: CheckoutCardDeclinedSpike
+        expr: |
+          (
+            sum(increase(backend_checkout_attempts_total{result="business_decline"}[5m]))
+            /
+            sum(increase(backend_checkout_attempts_total{result=~"paid|business_decline|technical_failure"}[5m]))
+          ) > 0.5
+          and
+          sum(increase(backend_checkout_attempts_total{result=~"paid|business_decline|technical_failure"}[5m])) >= 3
+        for: 3m
+        labels:
+          severity: warning
+          service: backend
+        annotations:
+          title: "Checkout: массово отклоняются карты ({{ $value | humanizePercentage }})"
+          description: "Доля card_declined за 5 минут = {{ $value | humanizePercentage }} (порог 50%, минимум 3 попытки). Система работает, но возможен неверный платёжный контракт или сломанный checkout."
+          runbook_url: "https://sre-lab.example/runbooks/CheckoutCardDeclinedSpike"
   # ── Метамониторинг: жив ли сам конвейер алертинга ────────────────────
   - name: meta
     rules:

@@ -488,6 +488,19 @@ func main() {
 		ctx, span := tracer.Start(r.Context(), "checkout.process")
 		defer span.End()
 
+		checkoutStart := time.Now()
+		checkoutResult, checkoutReason := "", ""
+		defer func() {
+			if checkoutResult == "" {
+				return
+			}
+			span.SetAttributes(
+				attribute.String("checkout.result", checkoutResult),
+				attribute.String("checkout.failure_reason", checkoutReason),
+			)
+			bizMetrics.RecordCheckout(checkoutResult, checkoutReason, time.Since(checkoutStart))
+		}()
+
 		log := obs.WithTrace(ctx, logger)
 		requestID := obs.RequestIDFromContext(ctx)
 
@@ -537,6 +550,7 @@ func main() {
 		reserveSpan.End()
 		if err != nil {
 			if errors.Is(err, store.ErrInsufficientStock) {
+				checkoutResult, checkoutReason = obs.CheckoutOutOfStock, obs.ReasonOutOfStock
 				bizMetrics.OrdersBlockedByStock.Inc()
 				reserveSpan.SetStatus(codes.Error, "insufficient stock")
 				log.Warn("order_blocked_low_stock",
@@ -582,6 +596,7 @@ func main() {
 			if errors.As(payErr, &decline) {
 				// Штатный отказ карты — не деградация сервиса.
 				failureReason = decline.Reason
+				checkoutResult, checkoutReason = obs.CheckoutBusinessDecline, failureReason
 				log.Warn("checkout failed: card declined",
 					"request_id", requestID,
 					"payment_id", paymentID,
@@ -593,6 +608,7 @@ func main() {
 				// 5xx, разомкнутая цепь) — то, что ищут студенты в
 				// лабе по трейсам/логам/метрикам.
 				failureReason = "payment_service_unavailable"
+				checkoutResult, checkoutReason = obs.CheckoutTechnicalFailure, obs.ReasonPaymentServiceUnavailable
 				log.Error("checkout failed: payment service degraded",
 					"request_id", requestID,
 					"circuit_breaker_state", payClient.State(),
@@ -606,6 +622,7 @@ func main() {
 			}
 			span.SetStatus(codes.Error, "checkout: "+failureReason)
 		} else {
+			checkoutResult, checkoutReason = obs.CheckoutPaid, obs.ReasonNone
 			log.Info("checkout succeeded",
 				"request_id", requestID,
 				"payment_id", paymentID,

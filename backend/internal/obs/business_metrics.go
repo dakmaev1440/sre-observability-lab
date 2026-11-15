@@ -32,6 +32,8 @@ type BusinessMetrics struct {
 	ReviewPosted   prometheus.Counter
 	ReviewRejected prometheus.Counter
 	ReviewRating   *prometheus.CounterVec // by rating 1..5
+	CheckoutAttempts *prometheus.CounterVec 
+	CheckoutDuration *prometheus.HistogramVec 
 }
 
 func newCounter(name, help string) prometheus.Counter {
@@ -64,7 +66,7 @@ func registerBM(c prometheus.Collector) {
 
 // NewBusinessMetrics создаёт и регистрирует бизнес-метрики.
 func NewBusinessMetrics() *BusinessMetrics {
-	return &BusinessMetrics{
+	bm := &BusinessMetrics{
 		UserLogins:           newCounter("user_logins_total", "Сколько раз пользователи вошли (вход по имени)."),
 		UserLogouts:          newCounter("user_logouts_total", "Сколько раз пользователи вышли."),
 		ActiveSessions:       newGauge("active_sessions", "Число активных in-memory сессий."),
@@ -78,7 +80,12 @@ func NewBusinessMetrics() *BusinessMetrics {
 		ReviewPosted:         newCounter("reviews_posted_total", "Отзывы, успешно созданные."),
 		ReviewRejected:       newCounter("reviews_rejected_total", "Отзывы, отклонённые валидацией (рейтинг/пустой комментарий)."),
 		ReviewRating:         newCounterVec("reviews_by_rating_total", "Опубликованные отзывы по оценке.", "rating"),
+
+		CheckoutAttempts: newCheckoutAttempts(),
+		CheckoutDuration: newCheckoutDuration(),
 	}
+	bm.initCheckoutSeries()
+	return bm
 }
 
 // UpdateGaugeCount обновляет датчик активных сессий текущим значением.

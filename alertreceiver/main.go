@@ -35,7 +35,8 @@ type alert struct {
 
 // webhookBody — конверт webhook-приёмника Alertmanager.
 type webhookBody struct {
-	Alerts []alert `json:"alerts"`
+	Receiver string  `json:"receiver"`
+	Alerts   []alert `json:"alerts"`
 }
 
 // newHandler собирает HTTP-маршруты сервиса. Вынесено в отдельную функцию,
@@ -59,6 +60,7 @@ func newHandler(logger *slog.Logger) http.Handler {
 				status = "unknown"
 			}
 			logger.Info("alert_notification",
+				"receiver", body.Receiver,
 				"status", status,
 				"alertname", a.Labels["alertname"],
 				"severity", a.Labels["severity"],
